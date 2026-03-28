@@ -1,6 +1,11 @@
 #!/bin/bash
 
 CONFIG_FILE="config.json"
+MENU_CMD="/usr/local/bin/menu"
+
+get_ip() {
+  curl -s ipinfo.io/ip
+}
 
 install_go() {
   echo "[+] Installing Go..."
@@ -9,8 +14,6 @@ install_go() {
   tar -C /usr/local -xzf go1.26.1.linux-amd64.tar.gz
   echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
   export PATH=$PATH:/usr/local/go/bin
-  source ~/.bashrc
-  go version
 }
 
 install_sshify() {
@@ -26,22 +29,23 @@ generate_ssh_key() {
 }
 
 create_config() {
-  echo "[+] First-time setup"
+  echo "[+] Creating config..."
 
-  read -p "Enter bind address (default 0.0.0.0): " addr
-  addr=${addr:-0.0.0.0}
+  IP=$(get_ip)
 
   read -p "Enter port (default 80): " port
   port=${port:-80}
+
+  read -p "Enter server message: " banner
 
   read -p "Enter username: " user
   read -p "Enter password: " pass
 
   cat <<EOF > $CONFIG_FILE
 {
-  "addr": "$addr",
+  "addr": "$IP",
   "port": $port,
-  "banner": "Welcome to ssh-ify!\n",
+  "banner": "$banner\n",
   "users": [
     {
       "user": "$user",
@@ -51,37 +55,43 @@ create_config() {
 }
 EOF
 
-  echo "[+] Config created"
+  echo "[+] Config created with IP: $IP"
 }
 
 change_credentials() {
-  echo "[+] Change user/password"
-
   read -p "New username: " user
   read -p "New password: " pass
 
-  # replace inside JSON
   sed -i "s/\"user\": \".*\"/\"user\": \"$user\"/" $CONFIG_FILE
   sed -i "s/\"pass\": \".*\"/\"pass\": \"$pass\"/" $CONFIG_FILE
 
-  echo "[+] Credentials updated"
+  echo "[+] Updated successfully"
 }
 
 start_service() {
   echo "[+] Starting ssh-ify..."
+  pkill ssh-ify 2>/dev/null
   nohup ssh-ify > sshify.log 2>&1 &
-  echo "[+] Running in background (log: sshify.log)"
+  echo "[+] Running (log: sshify.log)"
+}
+
+install_menu() {
+  echo "[+] Creating menu command..."
+  cp "$0" $MENU_CMD
+  chmod +x $MENU_CMD
+  echo "[+] Type 'menu' to open panel"
 }
 
 menu() {
-  echo ""
+  clear
+  echo "====== SSH-IFY MENU ======"
   echo "1) Install & Setup"
-  echo "2) Change user/pass"
-  echo "3) Start ssh-ify"
+  echo "2) Change User/Pass"
+  echo "3) Start Service"
   echo "4) Exit"
-  echo ""
+  echo "=========================="
 
-  read -p "Choose option: " opt
+  read -p "Choose: " opt
 
   case $opt in
     1)
@@ -90,6 +100,7 @@ menu() {
       generate_ssh_key
       create_config
       start_service
+      install_menu
       ;;
     2)
       change_credentials
@@ -106,7 +117,6 @@ menu() {
   esac
 }
 
-# Run menu loop
 while true; do
   menu
 done
